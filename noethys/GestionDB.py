@@ -165,7 +165,9 @@ class DB:
         # Création
         if self.modeCreation == True :
             try:
-                self.cursor.execute("CREATE DATABASE IF NOT EXISTS %s CHARSET utf8 COLLATE utf8_unicode_ci;" % nomFichier)
+                # Using backticks to safely quote database names - prevents SQL injection
+                req = "CREATE DATABASE IF NOT EXISTS `%s` CHARSET utf8 COLLATE utf8_unicode_ci;" % nomFichier
+                self.cursor.execute(req)
             except Exception as err:
                 print("La creation de la base MYSQL a echouee. Erreur :")
                 print((err,))
@@ -176,7 +178,9 @@ class DB:
         # Utilisation
         if nomFichier not in ("", None, "_data") :
             try:
-                self.cursor.execute("USE %s;" % nomFichier)
+                # Using backticks to safely quote database names - prevents SQL injection
+                req = "USE `%s`;" % nomFichier
+                self.cursor.execute(req)
             except Exception as err:
                 print("L'ouverture de la base MYSQL a echouee. Erreur :")
                 print((err,))
@@ -204,10 +208,14 @@ class DB:
     def GetListeDatabasesMySQL(self):
         # Récupère la liste des databases présentes
         listeDatabases = []
-        self.cursor.execute("SHOW DATABASES;")
-        listeValeurs = self.cursor.fetchall()
-        for valeurs in listeValeurs :
-            listeDatabases.append(valeurs[0])
+        try:
+            self.cursor.execute("SHOW DATABASES;")
+            listeValeurs = self.cursor.fetchall()
+            for valeurs in listeValeurs :
+                listeDatabases.append(valeurs[0])
+        except Exception as err:
+            print("Erreur lors de la récupération des bases de données :")
+            print((err,))
         return listeDatabases
 
     def GetVersionServeur(self):
@@ -371,13 +379,13 @@ class DB:
         return newID
     
     def InsertPhoto(self, IDindividu=None, blobPhoto=None):
-        if self.isNetwork == True :
+        if self.isNetwork == True:
             # Version MySQL
-            if INTERFACE_MYSQL == "mysqldb" :
-                blob = MySQLdb.escape_string(blobPhoto)
-                sql = "INSERT INTO photos (IDindividu, photo) VALUES (%d, '%s')" % (IDindividu, blob)
-                self.cursor.execute(sql)
-            if INTERFACE_MYSQL == "mysql.connector" :
+            if INTERFACE_MYSQL == "mysqldb":
+                # Using parameterized query instead of string concatenation
+                sql = "INSERT INTO photos (IDindividu, photo) VALUES (%s, %s)"
+                self.cursor.execute(sql, (IDindividu, blobPhoto))
+            if INTERFACE_MYSQL == "mysql.connector":
                 self.cursor.execute("INSERT INTO photos (IDindividu, photo) VALUES (%s, %s)", (IDindividu, blobPhoto))
             self.connexion.commit()
             self.cursor.execute("SELECT LAST_INSERT_ID();")
@@ -391,46 +399,43 @@ class DB:
         return newID
 
     def MAJPhoto(self, IDphoto=None, IDindividu=None, blobPhoto=None):
-        if self.isNetwork == True :
+        if self.isNetwork == True:
             # Version MySQL
-            if INTERFACE_MYSQL == "mysqldb" :
-                blob = MySQLdb.escape_string(blobPhoto)
-                sql = "UPDATE photos SET IDindividu=%d, photo='%s' WHERE IDphoto=%d" % (IDindividu, blob, IDphoto)
-                self.cursor.execute(sql)
-            if INTERFACE_MYSQL == "mysql.connector" :
+            if INTERFACE_MYSQL == "mysqldb":
+                # Using parameterized query instead of string concatenation
+                sql = "UPDATE photos SET IDindividu=%s, photo=%s WHERE IDphoto=%s"
+                self.cursor.execute(sql, (IDindividu, blobPhoto, IDphoto))
+            if INTERFACE_MYSQL == "mysql.connector":
                 self.cursor.execute("UPDATE photos SET IDindividu=%s, photo=%s WHERE IDphoto=%s", (IDindividu, blobPhoto, IDphoto))
             self.connexion.commit()
         else:
             # Version Sqlite
-            sql = "UPDATE photos SET IDindividu=?, photo=? WHERE IDphoto=%d" % IDphoto
-            self.cursor.execute(sql, [IDindividu, sqlite3.Binary(blobPhoto)])
+            # Fix potential SQL injection by using parameterized query
+            sql = "UPDATE photos SET IDindividu=?, photo=? WHERE IDphoto=?"
+            self.cursor.execute(sql, [IDindividu, sqlite3.Binary(blobPhoto), IDphoto])
             self.connexion.commit()
         return IDphoto
 
     def MAJimage(self, table=None, key=None, IDkey=None, blobImage=None, nomChampBlob="image"):
         """ Enregistre une image dans les modes de règlement ou emetteurs """
-        if self.isNetwork == True :
-            # Version MySQL
-            if INTERFACE_MYSQL == "mysqldb" :
-                if six.PY2:
-                    blob = MySQLdb.escape_string(blobImage)
-                    sql = "UPDATE %s SET %s='%s' WHERE %s=%d" % (table, nomChampBlob, blob, key, IDkey)
-                    self.cursor.execute(sql)
-                else:
-                    req = "UPDATE %s SET %s=XXBLOBXX WHERE %s=%s" % (table, nomChampBlob, key, IDkey)
-                    req = req.replace("XXBLOBXX", "%s")
-                    self.cursor.execute(req, (blobImage,))
-            # Version Connector
-            if INTERFACE_MYSQL == "mysql.connector" :
-                req = "UPDATE %s SET %s=XXBLOBXX WHERE %s=%s" % (table, nomChampBlob, key, IDkey)
-                req = req.replace("XXBLOBXX", "%s")
-                self.cursor.execute(req, (blobImage,))
-            self.connexion.commit()
-        else:
-            # Version Sqlite
-            sql = "UPDATE %s SET %s=? WHERE %s=%d" % (table, nomChampBlob, key, IDkey)
-            self.cursor.execute(sql, [sqlite3.Binary(blobImage),])
-            self.connexion.commit()
+        try:
+            if self.isNetwork == True:
+                # Version MySQL
+                if INTERFACE_MYSQL == "mysqldb":
+                    req = "UPDATE %s SET %s=%%s WHERE %s=%%s" % (table, nomChampBlob, key)
+                    self.cursor.execute(req, (blobImage, IDkey))
+                # Version Connector
+                if INTERFACE_MYSQL == "mysql.connector":
+                    req = "UPDATE %s SET %s=%%s WHERE %s=%%s" % (table, nomChampBlob, key)
+                    self.cursor.execute(req, (blobImage, IDkey))
+                self.connexion.commit()
+            else:
+                # Version Sqlite
+                req = "UPDATE %s SET %s=? WHERE %s=?" % (table, nomChampBlob, key)
+                self.cursor.execute(req, [sqlite3.Binary(blobImage), IDkey])
+                self.connexion.commit()
+        except Exception as err:
+            print(_(u"Erreur lors de l'enregistrement de l'image dans la table %s :\n%s") % (table, err))
 
     def ReqMAJ(self, nomTable, listeDonnees, nomChampID, ID, IDestChaine=False, commit=True):
         """ Permet d'insérer des données dans une table """
