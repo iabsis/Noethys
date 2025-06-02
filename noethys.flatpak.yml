@@ -1,0 +1,41 @@
+id: com.iabsis.Noethys
+runtime: org.freedesktop.Platform
+runtime-version: "22.08"
+sdk: org.freedesktop.Sdk
+command: noethys
+modules:
+  - name: mariadbclient
+    buildsystem: cmake-ninja
+    sources:
+      - type: archive
+        url: https://dlm.mariadb.com/4234414/Connectors/c/connector-c-3.4.5/mariadb-connector-c-3.4.5-src.tar.gz
+        sha256: b17e193816cb25c3364c2cc92a0ad3f1d0ad9f0f484dc76b8e7bdb5b50eac1a3
+    config-opts:
+      - -DWITH_EXTERNAL_ZLIB=NO
+      - -DWITH_OPENSSL=OFF
+      - -DCMAKE_INSTALL_PREFIX=/app
+    cleanup:
+      - /bin
+      - /share
+      - '*.la'
+  - shared-modules/glu/glu-9.json
+  - python3-wxPython.json
+  - requirements.json
+  # - name: python-dependencies
+  #   buildsystem: simple
+  #   build-commands:
+  #     - pip3 install --no-deps --prefix=/app --no-build-isolation --no-cache-dir --no-index --find-links=. -r requirements.txt
+  #   sources:
+  #     - type: file
+  #       path: requirements.txt
+  #     - type: file
+  #       path: requirements.json
+  # - name: noethys
+  #   buildsystem: simple
+  #   build-commands:
+  #     - install -Dm755 noethys/main.py /app/bin/noethys
+  #     # - install -Dm644 my-python-app.desktop /app/share/applications/noethys.desktop
+  #     # - install -Dm644 noethys.png /app/share/icons/hicolor/64x64/apps/noethys.png
+  #   sources:
+  #     - type: dir
+  #       path: .
