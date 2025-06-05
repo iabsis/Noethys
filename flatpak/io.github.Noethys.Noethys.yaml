@@ -1,0 +1,23 @@
+app-id: io.github.Noethys.Noethys
+runtime: org.freedesktop.Platform
+runtime-version: '22.08'
+sdk: org.freedesktop.Sdk
+command: noethys
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+modules:
+  - name: noethys
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=/app --no-cache-dir -r requirements.txt
+      - pip3 install --prefix=/app --no-cache-dir wxPython==4.2.1
+      - mkdir -p /app/share/noethys
+      - cp -r noethys/* /app/share/noethys/
+      - install -Dm755 flatpak/noethys-wrapper.sh /app/bin/noethys
+    sources:
+      - type: dir
+        path: ..
